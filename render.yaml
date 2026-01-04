@@ -15,7 +15,7 @@ services:
       npm install --prefer-offline --no-audit --no-fund --legacy-peer-deps
       echo "🔨 Building with NestJS..."
       export NODE_OPTIONS="--max-old-space-size=400"
-      npm run build
+      npx nest build --webpack=false
       echo "🧹 Cleaning up dev dependencies..."
       npm prune --production --no-audit --no-fund 2>&1 || true
       rm -rf .npm node_modules/.cache test temp
