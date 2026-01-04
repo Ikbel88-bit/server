@@ -18,12 +18,15 @@ services:
       echo "📦 Installing tsc-alias to fix src/ imports..."
       npm install --no-save tsc-alias --legacy-peer-deps 2>&1 || true
       echo "🔨 Compiling TypeScript (ignoring errors)..."
-      rm -rf dist && npx tsc -p tsconfig.build.json --skipLibCheck || true
+      rm -rf dist
+      ./node_modules/.bin/tsc -p tsconfig.build.json --skipLibCheck 2>&1 || node_modules/.bin/tsc -p tsconfig.build.json --skipLibCheck 2>&1 || echo "⚠️ TypeScript compilation had errors but continuing..."
       echo "🔧 Fixing import paths with tsc-alias..."
-      if [ -d dist ]; then
-        npx tsc-alias -p tsconfig.build.json || echo "⚠️ tsc-alias failed"
+      if [ -d dist ] && [ "$(ls -A dist 2>/dev/null)" ]; then
+        echo "✅ dist directory exists, running tsc-alias..."
+        ./node_modules/.bin/tsc-alias -p tsconfig.build.json || node_modules/.bin/tsc-alias -p tsconfig.build.json || echo "⚠️ tsc-alias failed"
       else
-        echo "❌ dist directory not created, build failed"
+        echo "❌ dist directory not created or empty, build failed"
+        exit 1
       fi
       echo "🧹 Cleaning up dev dependencies..."
       npm prune --production --no-audit --no-fund 2>&1 || true
