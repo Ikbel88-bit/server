@@ -44,7 +44,7 @@ services:
     startCommand: node --max-old-space-size=380 dist/main.js
     
     # ✅ Health check
-    healthCheckPath: /health
+    healthCheckPath: /
     
     # ✅ Auto-deploy sur push
     autoDeploy: true
