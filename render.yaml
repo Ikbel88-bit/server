@@ -27,7 +27,7 @@ services:
       echo "✅ Build completed successfully!"
     
     # 🔧 START COMMAND - 380MB pour laisser de la marge
-    startCommand: node --max-old-space-size=380 dist/main.js
+    startCommand: node --max-old-space-size=380 src/dist/main.js
     
     # ✅ Health check
     healthCheckPath: /health
