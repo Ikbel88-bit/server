@@ -15,13 +15,18 @@ services:
       npm install --prefer-offline --no-audit --no-fund --legacy-peer-deps
       echo "🔨 Building with NestJS..."
       export NODE_OPTIONS="--max-old-space-size=400"
+      echo "🔍 Checking for nest CLI..."
+      find node_modules -name "nest" -type f 2>/dev/null | head -1
       if [ -f ./node_modules/.bin/nest ]; then
+        echo "✅ Found nest at ./node_modules/.bin/nest"
         ./node_modules/.bin/nest build --webpack=false
       elif [ -f node_modules/@nestjs/cli/bin/nest.js ]; then
+        echo "✅ Found nest at node_modules/@nestjs/cli/bin/nest.js"
         node node_modules/@nestjs/cli/bin/nest.js build --webpack=false
       else
-        echo "⚠️ nest not found, trying npm run build..."
-        npm run build || npm run build:render
+        echo "⚠️ nest not found, installing @nestjs/cli globally..."
+        npm install -g @nestjs/cli 2>&1 || true
+        nest build --webpack=false || npm run build:render
       fi
       echo "🧹 Cleaning up dev dependencies..."
       npm prune --production --no-audit --no-fund 2>&1 || true
