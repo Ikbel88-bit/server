@@ -13,9 +13,9 @@ services:
       rm -rf dist src/dist .npm node_modules/.cache test temp uploads/videos uploads/thumbnails
       echo "📦 Installing all dependencies (including dev)..."
       npm install --prefer-offline --no-audit --no-fund --legacy-peer-deps
-      echo "🔨 Building with TypeScript compiler..."
+      echo "🔨 Building with NestJS..."
       export NODE_OPTIONS="--max-old-space-size=400"
-      npx tsc -p tsconfig.build.json
+      npm run build
       echo "🧹 Cleaning up dev dependencies..."
       npm prune --production --no-audit --no-fund 2>&1 || true
       rm -rf .npm node_modules/.cache test temp
