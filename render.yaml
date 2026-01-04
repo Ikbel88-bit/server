@@ -21,8 +21,13 @@ services:
       npm run build:render 2>&1 || echo "⚠️ TypeScript compilation had errors but continuing..."
       echo "🔧 Fixing import paths with tsc-alias..."
       if [ -d dist ] && [ "$(ls -A dist 2>/dev/null)" ]; then
-        echo "✅ dist directory exists with files, running tsc-alias..."
-        npx tsc-alias -p tsconfig.build.json 2>&1 || ./node_modules/.bin/tsc-alias -p tsconfig.build.json 2>&1 || echo "⚠️ tsc-alias failed but continuing..."
+        echo "✅ dist directory exists with files"
+        echo "🔍 Checking a file before tsc-alias..."
+        head -30 dist/modules/restaurants/restaurants.controller.js | grep -E "(require|import)" | head -5 || echo "No imports found"
+        echo "🔧 Running tsc-alias..."
+        npx tsc-alias -p tsconfig.build.json --resolve-full-paths 2>&1 || ./node_modules/.bin/tsc-alias -p tsconfig.build.json --resolve-full-paths 2>&1 || echo "⚠️ tsc-alias failed"
+        echo "🔍 Checking the same file after tsc-alias..."
+        head -30 dist/modules/restaurants/restaurants.controller.js | grep -E "(require|import)" | head -5 || echo "No imports found"
       else
         echo "❌ dist directory not created or empty"
         ls -la dist 2>&1 || echo "dist does not exist"
