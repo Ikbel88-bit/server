@@ -15,12 +15,8 @@ services:
       npm install --prefer-offline --no-audit --no-fund --legacy-peer-deps
       echo "🔨 Building with NestJS..."
       export NODE_OPTIONS="--max-old-space-size=400"
-      if [ -f node_modules/.bin/nest ]; then
-        node_modules/.bin/nest build --webpack=false
-      else
-        echo "⚠️ nest CLI not found, using npm run build..."
-        npm run build
-      fi
+      export PATH="./node_modules/.bin:$PATH"
+      npx nest build --webpack=false
       echo "🧹 Cleaning up dev dependencies..."
       npm prune --production --no-audit --no-fund 2>&1 || true
       rm -rf .npm node_modules/.cache test temp
