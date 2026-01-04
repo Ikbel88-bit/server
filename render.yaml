@@ -13,21 +13,14 @@ services:
       rm -rf dist src/dist .npm node_modules/.cache test temp uploads/videos uploads/thumbnails
       echo "📦 Installing all dependencies (including dev)..."
       npm install --prefer-offline --no-audit --no-fund --legacy-peer-deps
-      echo "🔨 Building with NestJS..."
+      echo "🔨 Building with TypeScript..."
       export NODE_OPTIONS="--max-old-space-size=400"
-      echo "🔍 Checking for nest CLI..."
-      find node_modules -name "nest" -type f 2>/dev/null | head -1
-      if [ -f ./node_modules/.bin/nest ]; then
-        echo "✅ Found nest at ./node_modules/.bin/nest"
-        ./node_modules/.bin/nest build --webpack=false
-      elif [ -f node_modules/@nestjs/cli/bin/nest.js ]; then
-        echo "✅ Found nest at node_modules/@nestjs/cli/bin/nest.js"
-        node node_modules/@nestjs/cli/bin/nest.js build --webpack=false
-      else
-        echo "⚠️ nest not found, installing @nestjs/cli globally..."
-        npm install -g @nestjs/cli 2>&1 || true
-        nest build --webpack=false || npm run build:render
-      fi
+      echo "📦 Installing tsc-alias to fix src/ imports..."
+      npm install --no-save tsc-alias --legacy-peer-deps 2>&1 || true
+      echo "🔨 Compiling TypeScript..."
+      npm run build:render
+      echo "🔧 Fixing import paths..."
+      npx tsc-alias -p tsconfig.build.json || echo "⚠️ tsc-alias failed, continuing..."
       echo "🧹 Cleaning up dev dependencies..."
       npm prune --production --no-audit --no-fund 2>&1 || true
       rm -rf .npm node_modules/.cache test temp
