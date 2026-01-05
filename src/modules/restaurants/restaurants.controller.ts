@@ -1,5 +1,6 @@
-import { Controller, Post, Get, Patch, Param, Body, UseGuards, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiBearerAuth, ApiOkResponse } from '@nestjs/swagger';
+import { Controller, Post, Get, Patch, Param, Body, UseGuards, BadRequestException, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiBearerAuth, ApiOkResponse, ApiConsumes } from '@nestjs/swagger';
 import { RestaurantsService } from './restaurants.service';
 import { CreateRestaurantDto } from './dto/create-restaurant.dto';
 import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
@@ -19,13 +20,28 @@ export class RestaurantsController {
   constructor(private readonly service: RestaurantsService) {}
 
   @Post()
+  @UseInterceptors(FileInterceptor('photo'))
   @ApiOperation({ summary: 'Créer un restaurant pour l\'utilisateur connecté' })
-  @ApiBody({ type: CreateRestaurantDto })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', example: 'Mon Restaurant' },
+        address: { type: 'string', example: '123 Rue de la Paix' },
+        description: { type: 'string', example: 'Un excellent restaurant' },
+        photo: { type: 'string', format: 'binary', description: 'Photo du restaurant' },
+        menu: { type: 'array', items: { type: 'object' }, description: 'Menu optionnel' },
+      },
+      required: ['name', 'address', 'photo'],
+    },
+  })
   async create(
     @CurrentUser() user: any,
     @Body() dto: CreateRestaurantDto,
+    @UploadedFile() file: Express.Multer.File,
   ) {
-    return await this.service.createRestaurant(user, dto);
+    return await this.service.createRestaurant(user, dto, file);
   }
 
   @Public()
@@ -142,11 +158,24 @@ export class RestaurantsController {
   }
 
   @Post(':id/menu')
-  @ApiOperation({ summary: 'Ajouter un plat au menu du restaurant' })
-  @ApiBody({ type: AddDishDto })
-  async addDish(@Param('id') id: string, @Body() dto: AddDishDto) {
-    return await this.service.addDish(id, dto);
-  }
+    @UseInterceptors(FileInterceptor('image'))
+    @ApiOperation({ summary: 'Ajouter un plat au menu du restaurant' })
+    @ApiConsumes('multipart/form-data')
+    @ApiBody({
+      schema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', example: 'Ratatouille' },
+          description: { type: 'string', example: 'Plat provençal aux légumes' },
+          price: { type: 'number', example: 12.5 },
+          image: { type: 'string', format: 'binary', description: 'Image du plat (fichier) ou laisser vide et utiliser image string dans payload' },
+        },
+        required: ['name'],
+      },
+    })
+    async addDish(@Param('id') id: string, @Body() dto: AddDishDto, @UploadedFile() file?: Express.Multer.File) {
+      return await this.service.addDish(id, dto, file);
+    }
 
   @Public()
   @Post(':id/generate-summary')

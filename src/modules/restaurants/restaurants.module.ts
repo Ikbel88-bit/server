@@ -7,6 +7,7 @@ import { Restaurant, RestaurantSchema } from './restaurant.schema';
 import { UsersModule } from '../users/users.module'; // ✅ importer UsersModule
 import { Reel, ReelSchema } from '../reels/reel.schema'; // ✅ importer Reel
 import { GeminiService } from './gemini.service';
+import { UploadModule } from '../upload/upload.module'; // ✅ importer UploadModule pour CloudinaryService
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { GeminiService } from './gemini.service';
       { name: Reel.name, schema: ReelSchema }, // ✅ pour vérifier les reels
     ]),
     UsersModule, // ✅ pour injecter UserModel
+    UploadModule, // ✅ pour injecter CloudinaryService
   ],
   controllers: [RestaurantsController],
   providers: [RestaurantsService, GeminiService],

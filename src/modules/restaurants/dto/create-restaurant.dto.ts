@@ -43,9 +43,10 @@ export class CreateRestaurantDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ description: 'URL ou nom de la photo principale du restaurant' })
+  @ApiPropertyOptional({ description: 'URL ou nom de la photo principale du restaurant (fournie via upload fichier)' })
   @IsString()
-  photo: string;
+  @IsOptional()
+  photo?: string;
 
   @ApiPropertyOptional({
     description: 'Liste optionnelle de plats à ajouter lors de la création du restaurant',

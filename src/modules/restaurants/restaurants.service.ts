@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { User, UserDocument } from '../users/user.schema';
 import { Reel, ReelDocument } from '../reels/reel.schema';
 import { GeminiService } from './gemini.service';
+import { CloudinaryService } from '../upload/cloudinary.service';
 
 export type ChatbotStep = 'peopleCount' | 'profile' | 'budget' | 'availability' | 'cuisine' | 'dietaryRestrictions' | 'recommendations';
 
@@ -43,13 +44,26 @@ export class RestaurantsService {
     @InjectModel(Reel.name)
     private reelModel: Model<ReelDocument>,
     private geminiService: GeminiService,
+    private cloudinaryService: CloudinaryService,
   ) {}
 
   // Créer un restaurant
   async createRestaurant(
     currentUser: { user_id: string; username?: string },
     dto: CreateRestaurantDto,
+    photoFile?: Express.Multer.File,
   ) {
+    // 📤 Upload la photo du restaurant vers Cloudinary
+    let photoUrl = dto.photo; // Fallback si pas de fichier
+    if (photoFile) {
+      try {
+        const uploadResult = await this.cloudinaryService.uploadImage(photoFile);
+        photoUrl = uploadResult.secure_url;
+      } catch (error) {
+        throw new BadRequestException(`Erreur upload photo: ${error.message}`);
+      }
+    }
+
     // Préparer le menu si des plats sont fournis
     const menu: Dish[] = [];
     if (dto.menu && dto.menu.length > 0) {
@@ -77,7 +91,7 @@ export class RestaurantsService {
       name: dto.name,
       address: dto.address,
       description: dto.description || '',
-      photos: [dto.photo],
+      photos: [photoUrl],
       rating: 0,
       reviews: [],
       menu: menu, // Utiliser le menu préparé
@@ -210,18 +224,28 @@ export class RestaurantsService {
   }
 
   // Ajouter un plat au menu
-  async addDish(id: string, dto: AddDishDto) {
+  async addDish(id: string, dto: AddDishDto, imageFile?: Express.Multer.File) {
     const restaurant = await this.getRestaurant(id);
     const dishId = uuidv4();
 
     // Déterminer l'URL de l'image
     let imageUrl: string | undefined;
-    if (dto.image) {
-      // Si l'image commence par http:// ou https://, c'est une URL externe
+
+    // 1) Si un fichier a été uploadé via multipart/form-data, l'uploader sur Cloudinary
+    if (imageFile) {
+      try {
+        const uploadResult = await this.cloudinaryService.uploadImage(imageFile);
+        imageUrl = uploadResult.secure_url;
+      } catch (error: any) {
+        throw new BadRequestException(`Erreur upload image plat: ${error.message}`);
+      }
+    }
+
+    // 2) Sinon, utiliser le champ dto.image s'il existe
+    if (!imageUrl && dto.image) {
       if (dto.image.startsWith('http://') || dto.image.startsWith('https://')) {
         imageUrl = dto.image;
       } else {
-        // Sinon, c'est une photo prédéfinie dans uploads/restaurants-images/dishes/
         imageUrl = `/uploads/restaurants-images/dishes/${dto.image}`;
       }
     }
