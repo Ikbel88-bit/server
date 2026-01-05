@@ -12,6 +12,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './google.strategy';
 import { AppleStrategy } from './apple.strategy'; // ✅ Ajouter
 import { User, UserSchema } from '../users/user.schema';
+import { UploadModule } from '../upload/upload.module'; // ✅ Importer UploadModule pour CloudinaryService
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { User, UserSchema } from '../users/user.schema';
         };
       },
     }),
+    UploadModule, // ✅ Importer UploadModule pour avoir accès à CloudinaryService
   ],
   controllers: [
     AuthController, 

@@ -12,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 import { User, UserDocument, AccountStatus } from '../users/user.schema';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { CloudinaryService } from '../upload/cloudinary.service';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +21,7 @@ export class AuthService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private jwtService: JwtService,
+    private cloudinaryService: CloudinaryService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<UserDocument> {
@@ -85,7 +87,7 @@ export class AuthService {
     };
   }
 
-  async register(registerDto: RegisterDto & { profile_picture?: string }) {
+  async register(registerDto: RegisterDto, photoFile?: Express.Multer.File) {
     const { email, username, password, ...rest } = registerDto;
 
     const [existingEmail, existingUsername] = await Promise.all([
@@ -101,6 +103,19 @@ export class AuthService {
       throw new ConflictException("Ce nom d'utilisateur est déjà pris");
     }
 
+    // 📤 Upload la photo de profil vers Cloudinary si un fichier est fourni
+    let profilePictureUrl: string | undefined;
+    if (photoFile) {
+      try {
+        const uploadResult = await this.cloudinaryService.uploadImage(photoFile);
+        profilePictureUrl = uploadResult.secure_url;
+        this.logger.log(`✅ Photo de profil uploadée vers Cloudinary pour ${email}`);
+      } catch (error) {
+        this.logger.error(`❌ Erreur upload photo de profil: ${error.message}`);
+        throw new BadRequestException(`Erreur upload photo: ${error.message}`);
+      }
+    }
+
     const password_hash = await bcrypt.hash(password, 12);
 
     try {
@@ -108,6 +123,7 @@ export class AuthService {
         username: username.toLowerCase(),
         email: email.toLowerCase(),
         password_hash,
+        profile_picture: profilePictureUrl,
         ...rest,
       });
 

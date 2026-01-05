@@ -13,8 +13,6 @@ import {
   Res,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
 import {
   ApiTags,
   ApiOperation,
@@ -57,14 +55,6 @@ export class AuthController {
   })
   @UseInterceptors(
     FileInterceptor('profile_picture', {
-      storage: diskStorage({
-        destination: process.env.UPLOAD_PATH || './uploads',
-        filename: (req, file, callback) => {
-          const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          const ext = extname(file.originalname);
-          callback(null, `avatar-${uniqueSuffix}${ext}`);
-        },
-      }),
       limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter: (req, file, callback) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
@@ -82,11 +72,7 @@ export class AuthController {
     @Body() registerDto: RegisterDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    const payload = file
-      ? { ...registerDto, profile_picture: file.path }
-      : registerDto;
-
-    const user = await this.authService.register(payload);
+    const user = await this.authService.register(registerDto, file);
 
     return {
       statusCode: HttpStatus.CREATED,
