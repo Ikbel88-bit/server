@@ -88,7 +88,9 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto, photoFile?: Express.Multer.File) {
-    const { email, username, password, ...rest } = registerDto;
+    const { email, username, password, profile_picture, ...rest } = registerDto as RegisterDto & {
+      profile_picture?: string;
+    };
 
     const [existingEmail, existingUsername] = await Promise.all([
       this.userModel.findOne({ email: email.toLowerCase() }).exec(),
@@ -103,8 +105,11 @@ export class AuthService {
       throw new ConflictException("Ce nom d'utilisateur est déjà pris");
     }
 
-    // 📤 Upload la photo de profil vers Cloudinary si un fichier est fourni
-    let profilePictureUrl: string | undefined;
+    // 📷 Déterminer l'URL de la photo de profil
+    // 1) Fallback: valeur éventuelle envoyée dans le DTO (URL externe, image par défaut, etc.)
+    let profilePictureUrl: string | undefined = profile_picture;
+
+    // 2) 📤 Upload la photo de profil vers Cloudinary si un fichier est fourni
     if (photoFile) {
       try {
         const uploadResult = await this.cloudinaryService.uploadImage(photoFile);
