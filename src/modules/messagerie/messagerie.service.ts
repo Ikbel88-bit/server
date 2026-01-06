@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  HttpException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -14,6 +15,7 @@ import {
   ConversationDocument,
   ParticipantType,
   MessageStatus,
+  MessageType,
 } from './message.schema';
 import { SendMessageDto } from './dto/send-message.dto';
 import { GetConversationDto } from './dto/get-conversation.dto';
@@ -25,7 +27,9 @@ export class MessagerieService {
   private readonly logger = new Logger(MessagerieService.name);
 
   constructor(
-    @InjectModel(Message.name) public messageModel: Model<MessageDocument>,
+    // Utiliser le modèle spécifique à la messagerie pour éviter les conflits
+    @InjectModel('MessagerieMessage')
+    public messageModel: Model<MessageDocument>,
     @InjectModel(Conversation.name)
     public conversationModel: Model<ConversationDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
@@ -86,46 +90,70 @@ export class MessagerieService {
     id: string;
     restaurant_id?: string; // ID du restaurant si c'est un restaurant
   }> {
-    // 1. Vérifier si c'est un restaurant (par le champ 'id')
-    const restaurant = await this.restaurantModel.findOne({ id: recipient_id }).exec();
+    // 1. Vérifier si c'est un restaurant
+    //    a) par le champ business `id`
+    //    b) ou par l'_id Mongo (pour supporter les deux usages côté front)
+    let restaurant =
+      (await this.restaurantModel.findOne({ id: recipient_id }).exec()) || null;
+
+    if (!restaurant && Types.ObjectId.isValid(recipient_id)) {
+      restaurant = await this.restaurantModel.findById(recipient_id).exec();
+    }
+
     if (restaurant) {
-      this.logger.log(`✅ Destinataire détecté comme RESTAURANT: ${recipient_id}`);
+      const restaurantIdentifier = restaurant.id || String(restaurant._id);
+      this.logger.log(
+        `✅ Destinataire détecté comme RESTAURANT: ${restaurantIdentifier}`,
+      );
+
       // Trouver le propriétaire du restaurant
       let ownerUser;
-      if (Types.ObjectId.isValid(restaurant.ownerId)) {
+      if (restaurant.ownerId && Types.ObjectId.isValid(restaurant.ownerId)) {
         ownerUser = await this.userModel.findById(restaurant.ownerId).exec();
-      } else {
-        ownerUser = await this.userModel.findOne({ user_id: restaurant.ownerId }).exec();
+      } else if (restaurant.ownerId) {
+        ownerUser = await this.userModel
+          .findOne({ user_id: restaurant.ownerId })
+          .exec();
       }
-      
+
       if (!ownerUser) {
         throw new NotFoundException(
-          `Propriétaire du restaurant "${recipient_id}" non trouvé.`,
+          `Propriétaire du restaurant "${restaurantIdentifier}" non trouvé.`,
         );
       }
-      
-      this.logger.log(`✅ Message sera envoyé au propriétaire du restaurant: ${String(ownerUser._id)}`);
-      return { 
+
+      this.logger.log(
+        `✅ Message sera envoyé au propriétaire du restaurant: ${String(
+          ownerUser._id,
+        )}`,
+      );
+      return {
         type: ParticipantType.USER, // Le message va au propriétaire (user)
         id: String(ownerUser._id),
-        restaurant_id: recipient_id, // On garde l'ID du restaurant pour référence
+        restaurant_id: restaurantIdentifier, // On garde l'ID du restaurant pour référence
       };
     }
 
     // 2. Vérifier si c'est un utilisateur (par ObjectId MongoDB)
     if (Types.ObjectId.isValid(recipient_id)) {
-      const user = await this.userModel.findById(recipient_id).exec();
-      if (user) {
-        this.logger.log(`✅ Destinataire détecté comme USER (ObjectId): ${recipient_id}`);
-        return { type: ParticipantType.USER, id: String(user._id) };
+      const userByObjectId = await this.userModel.findById(recipient_id).exec();
+      if (userByObjectId) {
+        this.logger.log(
+          `✅ Destinataire détecté comme USER (ObjectId): ${recipient_id}`,
+        );
+        return { type: ParticipantType.USER, id: String(userByObjectId._id) };
       }
     }
 
     // 3. Vérifier si c'est un utilisateur (par user_id UUID)
-    const user = await this.userModel.findOne({ user_id: recipient_id }).exec();
-    if (user) {
-      this.logger.log(`✅ Destinataire détecté comme USER (user_id): ${recipient_id}`);
-      return { type: ParticipantType.USER, id: String(user._id) };
+    const userByUserId = await this.userModel
+      .findOne({ user_id: recipient_id })
+      .exec();
+    if (userByUserId) {
+      this.logger.log(
+        `✅ Destinataire détecté comme USER (user_id): ${recipient_id}`,
+      );
+      return { type: ParticipantType.USER, id: String(userByUserId._id) };
     }
 
     throw new NotFoundException(
@@ -141,81 +169,118 @@ export class MessagerieService {
     sender_type: ParticipantType,
     dto: SendMessageDto,
   ): Promise<MessageDocument> {
-    this.logger.log(`🔍 Détection du destinataire: ${dto.recipient_id}`);
-    
-    // Détecter le type du destinataire
-    const recipient = await this.detectRecipientType(dto.recipient_id);
-    
-    this.logger.log(`✅ Destinataire détecté: ${recipient.type} avec ID: ${recipient.id}`);
+    try {
+      this.logger.log(
+        `🔍 Envoi de message - sender_id=${sender_id}, recipient_id=${dto.recipient_id}`,
+      );
 
-    // Normaliser le sender_id pour la comparaison
-    let normalizedSenderId = sender_id;
-    if (sender_type === ParticipantType.USER) {
-      // Si c'est un utilisateur, essayer de trouver son ObjectId ou user_id
-      if (Types.ObjectId.isValid(sender_id)) {
-        const senderUser = await this.userModel.findById(sender_id).exec();
-        if (senderUser) {
-          normalizedSenderId = String(senderUser._id);
-        }
-      } else {
-        // C'est peut-être un UUID user_id
-        const senderUser = await this.userModel.findOne({ user_id: sender_id }).exec();
-        if (senderUser) {
-          normalizedSenderId = String(senderUser._id);
+      if (!dto.recipient_id || !dto.content?.trim()) {
+        throw new BadRequestException(
+          'Le destinataire et le contenu du message sont requis',
+        );
+      }
+
+      // Détecter le type du destinataire
+      const recipient = await this.detectRecipientType(dto.recipient_id);
+
+      this.logger.log(
+        `✅ Destinataire détecté: ${recipient.type} avec ID: ${recipient.id}`,
+      );
+
+      // Normaliser le sender_id pour la comparaison
+      let normalizedSenderId = sender_id;
+      if (sender_type === ParticipantType.USER) {
+        // Si c'est un utilisateur, essayer de trouver son ObjectId ou user_id
+        if (Types.ObjectId.isValid(sender_id)) {
+          const senderUser = await this.userModel.findById(sender_id).exec();
+          if (senderUser) {
+            normalizedSenderId = String(senderUser._id);
+          }
+        } else {
+          // C'est peut-être un UUID user_id
+          const senderUser = await this.userModel
+            .findOne({ user_id: sender_id })
+            .exec();
+          if (senderUser) {
+            normalizedSenderId = String(senderUser._id);
+          }
         }
       }
-    }
 
-    // Vérifier qu'on ne s'envoie pas un message à soi-même
-    // Comparer les IDs normalisés
-    if (normalizedSenderId === recipient.id || sender_id === dto.recipient_id) {
+      // Vérifier qu'on ne s'envoie pas un message à soi-même
+      // Comparer les IDs normalisés
+      if (
+        normalizedSenderId === recipient.id ||
+        sender_id === dto.recipient_id
+      ) {
+        throw new BadRequestException(
+          'Vous ne pouvez pas vous envoyer un message à vous-même',
+        );
+      }
+
+      // Normaliser le sender_id pour la conversation (utiliser l'ObjectId si c'est un user)
+      const conversationSenderId =
+        sender_type === ParticipantType.USER ? normalizedSenderId : sender_id;
+
+      // Trouver ou créer la conversation
+      const conversation = await this.findOrCreateConversation(
+        conversationSenderId,
+        sender_type,
+        recipient.id,
+        recipient.type,
+      );
+
+      // Vérifier si la conversation est bloquée
+      if (conversation.is_blocked) {
+        throw new ForbiddenException('Cette conversation est bloquée');
+      }
+
+      // Créer le message (utiliser l'ID normalisé pour les users)
+      const message = new this.messageModel({
+        conversation_id: conversation.conversation_id,
+        sender_id: conversationSenderId,
+        sender_type,
+        // Important pour compatibilité avec d'anciennes versions du schéma
+        // où ces champs pouvaient être requis
+        recipient_id: recipient.restaurant_id || dto.recipient_id,
+        title: '',
+        message_type: MessageType.TEXT,
+        content: dto.content,
+        attachments: dto.attachments || [],
+        reply_to_message_id: dto.reply_to_message_id,
+        status: MessageStatus.SENT,
+      });
+
+      await message.save();
+
+      // Mettre à jour la conversation avec le dernier message
+      conversation.last_message_id = message.message_id;
+      conversation.last_message_content = dto.content;
+      conversation.last_message_at = new Date();
+      await conversation.save();
+
+      this.logger.log(
+        `✅ Message envoyé (${sender_type} -> ${recipient.type}): ${
+          message.message_id
+        } dans la conversation ${conversation.conversation_id}`,
+      );
+
+      return message;
+    } catch (error: any) {
+      this.logger.error(
+        `❌ Erreur interne lors de l'envoi du message: ${error?.message}`,
+      );
+
+      // Si c'est déjà une HttpException (404, 400, 403, etc.), on la relance telle quelle
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      // Sinon, on renvoie une BadRequest explicite pour éviter les 500 obscurs
       throw new BadRequestException(
-        'Vous ne pouvez pas vous envoyer un message à vous-même',
+        `Erreur lors de l'envoi du message: ${error?.message || 'erreur inconnue'}`,
       );
     }
-
-    // Normaliser le sender_id pour la conversation (utiliser l'ObjectId si c'est un user)
-    const conversationSenderId = sender_type === ParticipantType.USER 
-      ? normalizedSenderId 
-      : sender_id;
-
-    // Trouver ou créer la conversation
-    const conversation = await this.findOrCreateConversation(
-      conversationSenderId,
-      sender_type,
-      recipient.id,
-      recipient.type,
-    );
-
-    // Vérifier si la conversation est bloquée
-    if (conversation.is_blocked) {
-      throw new ForbiddenException('Cette conversation est bloquée');
-    }
-
-    // Créer le message (utiliser l'ID normalisé pour les users)
-    const message = new this.messageModel({
-      conversation_id: conversation.conversation_id,
-      sender_id: conversationSenderId,
-      sender_type,
-      content: dto.content,
-      attachments: dto.attachments || [],
-      reply_to_message_id: dto.reply_to_message_id,
-      status: MessageStatus.SENT,
-    });
-
-    await message.save();
-
-    // Mettre à jour la conversation avec le dernier message
-    conversation.last_message_id = message.message_id;
-    conversation.last_message_content = dto.content;
-    conversation.last_message_at = new Date();
-    await conversation.save();
-
-    this.logger.log(
-      `✅ Message envoyé (${sender_type} -> ${recipient.type}): ${message.message_id} dans la conversation ${conversation.conversation_id}`,
-    );
-
-    return message;
   }
 
 

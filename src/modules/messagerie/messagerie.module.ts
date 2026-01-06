@@ -5,12 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { MessagerieService } from './messagerie.service';
 import { MessagerieController } from './messagerie.controller';
 import { MessagerieGateway } from './messagerie.gateway';
-import {
-  Message,
-  MessageSchema,
-  Conversation,
-  ConversationSchema,
-} from './message.schema';
+import { Message, MessageSchema, Conversation, ConversationSchema } from './message.schema';
 import { User, UserSchema } from '../users/user.schema';
 import { Restaurant, RestaurantSchema } from '../restaurants/restaurant.schema';
 
@@ -18,7 +13,9 @@ import { Restaurant, RestaurantSchema } from '../restaurants/restaurant.schema';
   imports: [
     ConfigModule,
     MongooseModule.forFeature([
-      { name: Message.name, schema: MessageSchema },
+      // Utiliser un nom de modèle spécifique pour éviter les conflits
+      // avec le module "messages" qui a aussi un modèle Message
+      { name: 'MessagerieMessage', schema: MessageSchema },
       { name: Conversation.name, schema: ConversationSchema },
       { name: User.name, schema: UserSchema },
       { name: Restaurant.name, schema: RestaurantSchema },

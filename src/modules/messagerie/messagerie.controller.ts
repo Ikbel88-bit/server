@@ -14,6 +14,8 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiQuery,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -48,6 +50,39 @@ export class MessagerieController {
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
     description: 'Destinataire non trouvé',
+  })
+  @ApiConsumes('application/x-www-form-urlencoded')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        recipient_id: {
+          type: 'string',
+          description:
+            "ID du restaurant ou de l'utilisateur destinataire (restaurant.id ou user.user_id)",
+          example: '1cf6a627-3510-4017-b951-523fa5aecf34',
+        },
+        content: {
+          type: 'string',
+          description: 'Contenu du message',
+          example: 'Bonjour, est-ce que vous êtes ouverts ce soir ?',
+        },
+        attachments: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            "Pièces jointes (URLs d'images, vidéos, fichiers) – optionnel",
+          example: ['https://example.com/image.jpg'],
+        },
+        reply_to_message_id: {
+          type: 'string',
+          description:
+            'ID du message auquel vous répondez (laisser vide si nouveau message)',
+          nullable: true,
+        },
+      },
+      required: ['recipient_id', 'content'],
+    },
   })
   async sendMessage(
     @CurrentUser() user: any,
